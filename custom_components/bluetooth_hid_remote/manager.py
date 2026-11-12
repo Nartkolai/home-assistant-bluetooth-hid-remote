@@ -186,6 +186,45 @@ class BluetoothHidRemoteManager:
         self._notification_paths: set[str] = set()
         self._notification_lock = Lock()
         self._stopping = False
+        # MUZHTEN debounce: ignore duplicate reports within 100ms
+        self._muzhten_last_report: tuple[int, bytes] | None = None
+        self._muzhten_report_timer: TimerHandle | None = None
+        # MUZHTEN debounce: ignore duplicate reports within 100ms
+        self._muzhten_last_report: tuple[int, bytes] | None = None
+        self._muzhten_report_timer: TimerHandle | None = None
+        # MUZHTEN debounce: ignore duplicate reports within 100ms
+        self._muzhten_last_report: tuple[int, bytes] | None = None
+        self._muzhten_report_timer: TimerHandle | None = None
+        # MUZHTEN debounce: ignore duplicate reports within 100ms
+        self._muzhten_last_report: tuple[int, bytes] | None = None
+        self._muzhten_report_timer: TimerHandle | None = None
+        # MUZHTEN debounce: ignore duplicate reports within 100ms
+        self._muzhten_last_report: tuple[int, bytes] | None = None
+        self._muzhten_report_timer: TimerHandle | None = None
+        # MUZHTEN debounce: ignore duplicate reports within 100ms
+        self._muzhten_last_report: tuple[int, bytes] | None = None
+        self._muzhten_report_timer: TimerHandle | None = None
+        # MUZHTEN debounce: ignore duplicate reports within 100ms
+        self._muzhten_last_report: tuple[int, bytes] | None = None
+        self._muzhten_report_timer: TimerHandle | None = None
+        # MUZHTEN debounce: ignore duplicate reports within 100ms
+        self._muzhten_last_report: tuple[int, bytes] | None = None
+        self._muzhten_report_timer: TimerHandle | None = None
+        # MUZHTEN debounce: ignore duplicate reports within 100ms
+        self._muzhten_last_report: tuple[int, bytes] | None = None
+        self._muzhten_report_timer: TimerHandle | None = None
+        # MUZHTEN debounce: ignore duplicate reports within 100ms
+        self._muzhten_last_report: tuple[int, bytes] | None = None
+        self._muzhten_report_timer: TimerHandle | None = None
+        # MUZHTEN debounce: ignore duplicate reports within 100ms
+        self._muzhten_last_report: tuple[int, bytes] | None = None
+        self._muzhten_report_timer: TimerHandle | None = None
+        # MUZHTEN debounce: ignore duplicate reports within 100ms
+        self._muzhten_last_report: tuple[int, bytes] | None = None
+        self._muzhten_report_timer: TimerHandle | None = None
+        # MUZHTEN debounce: ignore duplicate reports within 100ms
+        self._muzhten_last_report: tuple[int, bytes] | None = None
+        self._muzhten_report_timer: TimerHandle | None = None
 
     async def async_start(self) -> None:
         """Register passive observers for BlueZ and HA Bluetooth discovery."""
@@ -389,16 +428,20 @@ class BluetoothHidRemoteManager:
 
     async def _async_map_report_characteristics_then_retry(self) -> None:
         """Map once and start one bounded retry loop when BlueZ is early."""
-        try:
-            complete = await self._async_map_report_characteristics()
-        except Exception:
-            complete = False
-            _LOGGER.debug(
-                "Could not finish HOGP metadata mapping for %s",
-                self.address,
-                exc_info=True,
-            )
-        if not complete:
+        for attempt in range(3):
+            if attempt > 0:
+                await asyncio.sleep(0.5 * attempt)
+            try:
+                complete = await self._async_map_report_characteristics()
+                if complete:
+                    break
+            except Exception:
+                _LOGGER.debug(
+                    "Could not finish HOGP metadata mapping for %s (attempt %d)",
+                    self.address, attempt + 1,
+                    exc_info=True,
+                )
+        else:
             self._schedule_metadata_retry()
 
     async def _async_map_report_characteristics(self) -> bool:
@@ -419,13 +462,19 @@ class BluetoothHidRemoteManager:
                 device_path,
                 use_cached=False,
             )
-        except Exception:
+        except Exception as err:
             self.connection_failures += 1
-            _LOGGER.debug(
-                "BlueZ did not expose HOGP GATT metadata for %s",
-                self.address,
-                exc_info=True,
-            )
+            if "disconnected" in str(err).lower():
+                _LOGGER.debug(
+                    "Remote disconnected during service discovery for %s",
+                    self.address,
+                )
+            else:
+                _LOGGER.debug(
+                    "BlueZ did not expose HOGP GATT metadata for %s",
+                    self.address,
+                    exc_info=True,
+                )
             return False
 
         atvv_notification_paths = self._map_atvv_characteristics(
@@ -1204,6 +1253,10 @@ class BluetoothHidRemoteManager:
         usages: tuple[HidUsage, ...] = ()
         if self._report_decoder is not None:
             usages = self._report_decoder.decode(report_id, value)
+            _LOGGER.debug(
+                "HID decode report_id=%d data=%s usages=%s",
+                report_id, value.hex(), usages,
+            )
         if usages:
             self._active_usages_by_path[path] = usages
         elif any(value):

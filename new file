@@ -1,0 +1,13 @@
+Это пульт MUZHTEN для Douyin (TikTok). Он использует vendor-specific HID page 0x000D — не стандартные Android TV usages.
+
+Кнопки по инструкции:
+
+Кнопка  	Клик	    Долгое
+Верх	↑ (up page)	    ↑ Volume Up
+Лево	← (left page)	← Back
+Право	→ (right page)	→ Lock screen
+Низ	    ↓ (down page)	↓ Volume Down
+Центр	Pause	        Double-tap: Like, Long: Auto-like
+Проблема: пульт использует vendor page 0x000D, а Android TV профиль маппит только стандартные HID usages.
+
+Нужно добавить кастомный маппинг для этого пульта. Посмотрю как работает keymap:

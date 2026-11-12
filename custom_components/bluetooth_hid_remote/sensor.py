@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from homeassistant.components.sensor import SensorEntity, SensorEntityDescription
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import CONNECTION_BLUETOOTH, DeviceInfo
@@ -13,6 +15,8 @@ from .hid import HidUsage
 from .keymap import KeyIdentity, mapped_key_attributes
 from .manager import HidInputReport
 
+_LOGGER = logging.getLogger(__name__)
+
 LAST_KEY_DESCRIPTION = SensorEntityDescription(
     key="last_key",
     translation_key="last_key",
@@ -23,6 +27,46 @@ LAST_KEY_CODE_DESCRIPTION = SensorEntityDescription(
     translation_key="last_key_code",
     icon="mdi:numeric",
 )
+
+# MUZHTEN Douyin remote uses vendor HID page 13 (0x000D) with 4 usages per report.
+# The usages are always the same — the key is identified by the first, second, and fourth bytes of data.
+# Format: (first_byte, second_byte, fourth_byte)
+# First byte: 0x03 = press, 0x02 = release
+MUZHTEN_DATA_KEY_MAP: dict[tuple[int, int, int], tuple[str, int]] = {
+    # data=02f4c112 → [0x02, 0xf4, 0x12] = DPAD_UP
+    (0x02, 0xf4, 0x12): ("DPAD_UP", 19),
+    # data=02f4c130 → [0x02, 0xf4, 0x30] = DPAD_DOWN
+    (0x02, 0xf4, 0x30): ("DPAD_DOWN", 22),
+    # data=022cc112 → [0x02, 0x2c, 0x12] = DPAD_LEFT
+    (0x02, 0x2c, 0x12): ("DPAD_LEFT", 21),
+    # data=02bcc212 → [0x03, 0xf4, 0x12] = DPAD_RIGHT
+    (0x02, 0xbc, 0x12): ("DPAD_RIGHT", 23),
+}
+
+
+def _resolve_muzhten_data(data: bytes) -> tuple[str, int] | None:
+    """Resolve MUZHTEN data to (key_name, key_code).
+    
+    Returns the (name, code) tuple if this is a MUZHTEN report, None otherwise.
+    Uses first, second, and fourth bytes for unique identification.
+    """
+    if len(data) < 4:
+        return None
+    
+    first_byte = data[0]
+    if first_byte not in (0x02, 0x03):
+        return None
+    
+    second_byte = data[1]
+    fourth_byte = data[3]
+    
+    key = (first_byte, second_byte, fourth_byte)
+    result = MUZHTEN_DATA_KEY_MAP.get(key)
+    _LOGGER.debug(
+        "MUZHTEN data lookup: data=%s → [0x%02x, 0x%02x, 0x%02x] → key=%s → result=%s",
+        data.hex(), first_byte, second_byte, fourth_byte, key, result,
+    )
+    return result
 
 
 def key_sensor_attributes(manager, report: HidInputReport, usage: HidUsage) -> dict:
@@ -92,7 +136,14 @@ class BluetoothHidRemoteKeySensorBase(SensorEntity):
             return
         self._report = report
         self._usage = report.usages[0]
-        self._identity = self._manager.key_mapper.resolve(self._usage)
+        
+        # Check for MUZHTEN vendor report first (by data pattern)
+        muzhten = _resolve_muzhten_data(report.data)
+        if muzhten:
+            key_name, key_code = muzhten
+            self._identity = KeyIdentity("android", key_code, key_name)
+        else:
+            self._identity = self._manager.key_mapper.resolve(self._usage)
         self.async_write_ha_state()
 
 
