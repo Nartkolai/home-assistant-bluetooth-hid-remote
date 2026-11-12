@@ -7,7 +7,13 @@ import logging
 from typing import Any, Literal
 
 import voluptuous as vol
+from bleak.backends.bluezdbus import defs
 from bleak.backends.bluezdbus.manager import get_global_bluez_manager
+from bleak.backends.bluezdbus.utils import assert_reply
+from dbus_fast.aio import MessageBus
+from dbus_fast.constants import BusType
+from dbus_fast.message import Message
+from dbus_fast.signature import Variant
 from homeassistant.components import bluetooth
 from homeassistant.config_entries import (
     ConfigEntry,
@@ -49,6 +55,7 @@ from .pairing import (
     async_pair_hogp_device,
     async_rebuild_hogp_bond,
     async_remove_hogp_device,
+    async_open_system_bus,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -353,6 +360,56 @@ class BluetoothHidRemoteConfigFlow(ConfigFlow, domain=DOMAIN):
         """Allow verification retries or an explicit cache rollback."""
         return vol.Schema({vol.Optional(_CONF_RESTORE_COMPATIBILITY_CACHE): bool})
 
+    async def _async_start_bluez_discovery(self) -> None:
+        """Start a brief active BLE scan via BlueZ D-Bus when HA API is unavailable."""
+        manager = await get_global_bluez_manager()
+
+        # Find the direct local adapter (not a proxy)
+        adapter_path = None
+        for path, interfaces in manager._properties.items():
+            adapter = interfaces.get(defs.ADAPTER_INTERFACE, {})
+            if adapter and adapter.get("Address"):
+                # Prefer the local built-in adapter (Powered=True)
+                if adapter.get("Powered"):
+                    adapter_path = path
+                    break
+
+        if not adapter_path:
+            _LOGGER.debug("No adapter found for active discovery")
+            return
+
+        bus = await async_open_system_bus()
+        started = False
+        try:
+            try:
+                await bus.call(
+                    Message(
+                        destination=defs.BLUEZ_SERVICE,
+                        path=adapter_path,
+                        interface=defs.ADAPTER_INTERFACE,
+                        member="StartDiscovery",
+                    )
+                )
+                started = True
+                await asyncio.sleep(5.0)
+            finally:
+                if started:
+                    try:
+                        await bus.call(
+                            Message(
+                                destination=defs.BLUEZ_SERVICE,
+                                path=adapter_path,
+                                interface=defs.ADAPTER_INTERFACE,
+                                member="StopDiscovery",
+                            )
+                        )
+                    except Exception:
+                        pass
+        except Exception:
+            _LOGGER.debug("Could not start BlueZ discovery", exc_info=True)
+        finally:
+            bus.disconnect()
+
     async def _async_direct_discoveries(
         self,
     ) -> dict[str, bluetooth.BluetoothServiceInfoBleak]:
@@ -373,7 +430,7 @@ class BluetoothHidRemoteConfigFlow(ConfigFlow, domain=DOMAIN):
             # AUTO-mode local adapters normally remain passive until a client asks
             # for an active scan.  ESPHome proxies may otherwise win discovery
             # while a fresh, unpaired remote never gets a local BlueZ Device1 path.
-            await bluetooth.async_request_active_scan(self.hass, duration=5.0)
+            await self._async_start_bluez_discovery()
         discoveries = await self._async_direct_discoveries()
         if user_input is not None:
             address = user_input[CONF_ADDRESS]

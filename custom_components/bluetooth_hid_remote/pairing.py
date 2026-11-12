@@ -158,7 +158,7 @@ class BluetoothHidPairingAgent(ServiceInterface):
 BusFactory = Callable[[], Awaitable[MessageBus]]
 
 
-async def _async_open_system_bus() -> MessageBus:
+async def async_open_system_bus() -> MessageBus:
     """Open a dedicated system bus connection for one pairing attempt."""
     return await MessageBus(
         bus_type=BusType.SYSTEM,
@@ -341,7 +341,7 @@ async def async_remove_hogp_device(
     address: str,
     *,
     manager: BlueZManager | None = None,
-    bus_factory: BusFactory = _async_open_system_bus,
+    bus_factory: BusFactory = async_open_system_bus,
     ignore_missing: bool = False,
 ) -> bool:
     """Remove exactly one direct-adapter Bluetooth device from BlueZ."""
@@ -381,7 +381,7 @@ async def async_rebuild_hogp_bond(
     address: str,
     *,
     manager: BlueZManager | None = None,
-    bus_factory: BusFactory = _async_open_system_bus,
+    bus_factory: BusFactory = async_open_system_bus,
     timeout: float = PAIRING_TIMEOUT,
 ) -> PairingResult:
     """Remove, rediscover, pair, and verify one selected HOGP remote."""
@@ -444,7 +444,7 @@ async def async_pair_hogp_device(
     address: str,
     *,
     manager: BlueZManager | None = None,
-    bus_factory: BusFactory = _async_open_system_bus,
+    bus_factory: BusFactory = async_open_system_bus,
     timeout: float = PAIRING_TIMEOUT,
     replace_existing: bool = False,
 ) -> PairingResult:

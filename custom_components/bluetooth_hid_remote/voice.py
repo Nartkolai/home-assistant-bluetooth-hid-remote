@@ -6,7 +6,7 @@ import asyncio
 from contextlib import suppress
 from dataclasses import dataclass, field
 from struct import pack, pack_into
-from typing import Final
+from typing import Final, TypeAlias
 
 VOICE_REPORT_ID: Final = 0xF0
 VOICE_PACKET_SIZE: Final = 80
@@ -158,7 +158,7 @@ class PcmVoicePacket:
     data: bytes
 
 
-type VoicePacket = HidVoicePacket | PcmVoicePacket
+VoicePacket: TypeAlias = HidVoicePacket | PcmVoicePacket
 
 
 @dataclass(slots=True)

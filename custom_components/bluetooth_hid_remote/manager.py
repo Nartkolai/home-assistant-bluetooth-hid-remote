@@ -6,7 +6,7 @@ import logging
 from asyncio import Lock, Task, TimerHandle, sleep
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, TypeAlias
 
 from bleak.backends.bluezdbus import defs
 from bleak.backends.bluezdbus.manager import (
@@ -14,7 +14,7 @@ from bleak.backends.bluezdbus.manager import (
     DeviceWatcher,
     get_global_bluez_manager,
 )
-from bleak.backends.bluezdbus.utils import assert_gatt_reply, assert_reply
+from bleak.backends.bluezdbus.utils import assert_reply
 from dbus_fast.message import Message
 from dbus_fast.signature import Variant
 from homeassistant.components import bluetooth
@@ -70,7 +70,7 @@ _SEARCH_USAGE = (0x0C, 0x0221)
 _GENUINE_FIRE_TV_MODALIAS_PREFIX = "bluetooth:v0171p042f"
 _GENUINE_FIRE_TV_HID_ID = "0005:00000171:0000042f"
 
-type VoiceListener = Callable[[VoicePacket | None], None]
+VoiceListener: TypeAlias = Callable[[VoicePacket | None], None]
 
 _ATVV_CHARACTERISTIC_KINDS = {
     ATVV_TX_UUID: "tx",
@@ -199,6 +199,13 @@ class BluetoothHidRemoteManager:
                 BluetoothCallbackMatcher(address=self.address),
                 BluetoothScanningMode.PASSIVE,
             )
+        except TypeError:
+            # HA < 2026.6: scanning_mode parameter not yet available
+            self._unsub_bluetooth = bluetooth.async_register_callback(
+                self.hass,
+                self._async_bluetooth_update,
+                BluetoothCallbackMatcher(address=self.address),
+            )
         except Exception:
             await self.input_grabber.async_stop()
             raise
@@ -266,7 +273,13 @@ class BluetoothHidRemoteManager:
             return
 
         manager = await get_global_bluez_manager()
-        device = bluetooth.async_ble_device_from_address(self.hass, self.address, True)
+        try:
+            device = bluetooth.async_ble_device_from_address(
+                self.hass, self.address, True
+            )
+        except TypeError:
+            # HA < 2026.6: allow_proxy parameter not yet available
+            device = bluetooth.async_ble_device_from_address(self.hass, self.address)
         details = device.details if device is not None else None
         device_path = details.get("path") if isinstance(details, dict) else None
         if not isinstance(device_path, str):
@@ -399,6 +412,12 @@ class BluetoothHidRemoteManager:
                 device_path,
                 use_cached=False,
                 requested_services={HID_SERVICE_UUID, ATVV_SERVICE_UUID},
+            )
+        except TypeError:
+            # HA < 2026.6: requested_services parameter not yet available
+            services = await manager.get_services(
+                device_path,
+                use_cached=False,
             )
         except Exception:
             self.connection_failures += 1
@@ -676,7 +695,7 @@ class BluetoothHidRemoteManager:
                 body=[bytes(value), {"type": Variant("s", write_type)}],
             )
         )
-        assert_gatt_reply(reply)
+        assert_reply(reply)
         _LOGGER.debug(
             "Sent HID %s address=%s report_id=0x%02x value=%s bytes=%d",
             operation,
@@ -826,7 +845,7 @@ class BluetoothHidRemoteManager:
                 body=[{}],
             )
         )
-        assert_gatt_reply(reply)
+        assert_reply(reply)
         return bytes(reply.body[0])
 
     async def _async_write_atvv(self, value: bytes, operation: str) -> None:
@@ -855,7 +874,7 @@ class BluetoothHidRemoteManager:
                 body=[bytes(value), {"type": Variant("s", "command")}],
             )
         )
-        assert_gatt_reply(reply)
+        assert_reply(reply)
         _LOGGER.debug(
             "Sent ATVV %s address=%s bytes=%d", operation, self.address, len(value)
         )
@@ -939,7 +958,7 @@ class BluetoothHidRemoteManager:
                             member="StartNotify",
                         )
                     )
-                    assert_gatt_reply(reply, start_notify=True)
+                    assert_reply(reply)
                 except Exception:
                     self._initial_cached_values_by_path.pop(path, None)
                     self.connection_failures += 1

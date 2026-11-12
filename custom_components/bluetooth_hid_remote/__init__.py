@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import TypeAlias
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -20,7 +21,7 @@ from .pairing import PairingError, async_remove_hogp_device
 
 _LOGGER = logging.getLogger(__name__)
 
-type BluetoothHidRemoteConfigEntry = ConfigEntry[BluetoothHidRemoteManager]
+BluetoothHidRemoteConfigEntry: TypeAlias = ConfigEntry[BluetoothHidRemoteManager]
 
 
 async def async_setup_entry(

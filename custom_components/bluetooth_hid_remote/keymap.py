@@ -6,7 +6,7 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeAlias
 
 from homeassistant.core import HomeAssistant
 from homeassistant.util.yaml import load_yaml_dict
@@ -20,7 +20,7 @@ from .const import (
 )
 from .hid import HidUsage
 
-type UsageKey = tuple[int, int]
+UsageKey: TypeAlias = tuple[int, int]
 
 
 class KeyMapError(ValueError):

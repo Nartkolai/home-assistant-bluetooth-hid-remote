@@ -103,7 +103,7 @@ async def test_setup_acquires_input_before_forwarding_entities(
         operations.append("forward")
 
     hass = SimpleNamespace(
-        config_entries=SimpleNamespace(async_forward_entry_setups=forward)
+        config_entries=SimpleNamespace(async_setup_platforms=forward)
     )
     entry = SimpleNamespace(
         data={CONF_ADDRESS: "00:11:22:33:44:55", CONF_KEY_PROFILE: KEY_PROFILE_HID},
