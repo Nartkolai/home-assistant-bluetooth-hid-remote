@@ -36,6 +36,8 @@ MUZHTEN_DATA_KEY_MAP: dict[tuple[int, int, int], str] = {
     (0x02, 0x2c, 0x12): "DPAD_LEFT",
     # data=02bcc212 → [0x03, 0xf4, 0x12] = DPAD_RIGHT
     (0x02, 0xbc, 0x12): "DPAD_RIGHT",
+    # data=03f5c112 → [0x03, 0xf5, 0x12] = DPAD_CENTER
+    (0x03, 0xf5, 0x12): "DPAD_CENTER",
 }
 
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from asyncio import Lock, Task, TimerHandle, sleep
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -186,42 +187,6 @@ class BluetoothHidRemoteManager:
         self._notification_paths: set[str] = set()
         self._notification_lock = Lock()
         self._stopping = False
-        # MUZHTEN debounce: ignore duplicate reports within 100ms
-        self._muzhten_last_report: tuple[int, bytes] | None = None
-        self._muzhten_report_timer: TimerHandle | None = None
-        # MUZHTEN debounce: ignore duplicate reports within 100ms
-        self._muzhten_last_report: tuple[int, bytes] | None = None
-        self._muzhten_report_timer: TimerHandle | None = None
-        # MUZHTEN debounce: ignore duplicate reports within 100ms
-        self._muzhten_last_report: tuple[int, bytes] | None = None
-        self._muzhten_report_timer: TimerHandle | None = None
-        # MUZHTEN debounce: ignore duplicate reports within 100ms
-        self._muzhten_last_report: tuple[int, bytes] | None = None
-        self._muzhten_report_timer: TimerHandle | None = None
-        # MUZHTEN debounce: ignore duplicate reports within 100ms
-        self._muzhten_last_report: tuple[int, bytes] | None = None
-        self._muzhten_report_timer: TimerHandle | None = None
-        # MUZHTEN debounce: ignore duplicate reports within 100ms
-        self._muzhten_last_report: tuple[int, bytes] | None = None
-        self._muzhten_report_timer: TimerHandle | None = None
-        # MUZHTEN debounce: ignore duplicate reports within 100ms
-        self._muzhten_last_report: tuple[int, bytes] | None = None
-        self._muzhten_report_timer: TimerHandle | None = None
-        # MUZHTEN debounce: ignore duplicate reports within 100ms
-        self._muzhten_last_report: tuple[int, bytes] | None = None
-        self._muzhten_report_timer: TimerHandle | None = None
-        # MUZHTEN debounce: ignore duplicate reports within 100ms
-        self._muzhten_last_report: tuple[int, bytes] | None = None
-        self._muzhten_report_timer: TimerHandle | None = None
-        # MUZHTEN debounce: ignore duplicate reports within 100ms
-        self._muzhten_last_report: tuple[int, bytes] | None = None
-        self._muzhten_report_timer: TimerHandle | None = None
-        # MUZHTEN debounce: ignore duplicate reports within 100ms
-        self._muzhten_last_report: tuple[int, bytes] | None = None
-        self._muzhten_report_timer: TimerHandle | None = None
-        # MUZHTEN debounce: ignore duplicate reports within 100ms
-        self._muzhten_last_report: tuple[int, bytes] | None = None
-        self._muzhten_report_timer: TimerHandle | None = None
         # MUZHTEN debounce: ignore duplicate reports within 100ms
         self._muzhten_last_report: tuple[int, bytes] | None = None
         self._muzhten_report_timer: TimerHandle | None = None
@@ -1091,6 +1056,32 @@ class BluetoothHidRemoteManager:
         if path in self._ignored_value_paths:
             _LOGGER.debug("Ignored static HID metadata value path=%s", path)
             return
+        # MUZHTEN debounce: skip duplicate reports within 100ms
+        if len(value) >= 4:
+            first_byte = value[0]
+            if first_byte in (0x02, 0x03):
+                muzhten_key = (first_byte, value[1], value[3])
+                last_report = self._muzhten_last_report
+                if last_report is not None:
+                    last_time, last_data = last_report
+                    if (
+                        time.monotonic() - last_time < 0.1
+                        and muzhten_key == (last_data[0], last_data[1], last_data[3])
+                    ):
+                        _LOGGER.debug(
+                            "MUZHTEN debounce: ignored duplicate report data=%s",
+                            value.hex(),
+                        )
+                        if self._muzhten_report_timer is not None:
+                            self._muzhten_report_timer.cancel()
+                            self._muzhten_report_timer = None
+                        return
+                self._muzhten_last_report = (time.monotonic(), value)
+                if self._muzhten_report_timer is not None:
+                    self._muzhten_report_timer.cancel()
+                self._muzhten_report_timer = self.hass.loop.call_later(
+                    0.1, self._clear_muzhten_debounce
+                )
         atvv_kind = getattr(self, "_atvv_paths", {}).get(path)
         if path in self._initial_cached_values_by_path:
             initial_value = self._initial_cached_values_by_path.pop(path)
@@ -1303,3 +1294,9 @@ class BluetoothHidRemoteManager:
             )
         for listener in tuple(self._voice_listeners):
             listener(packet)
+
+    @callback
+    def _clear_muzhten_debounce(self) -> None:
+        """Clear the MUZHTEN debounce state after the window expires."""
+        self._muzhten_last_report = None
+        self._muzhten_report_timer = None
